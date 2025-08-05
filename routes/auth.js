@@ -7,12 +7,12 @@ const jwt = require("jsonwebtoken");
 router.post("/register", async (req, res) => {
     try {
         // Validate required fields
-        const { username, email, password } = req.body;
-        
-        if (!username || !email || !password) {
+        const { username, email, password, helpText } = req.body;
+
+        if (!username || !email || !password || !helpText) {
             return res.status(400).json({
                 success: false,
-                message: "All fields are required: username, email, password"
+                message: "All fields are required: username, email, password , helptext"
             });
         }
 
@@ -41,8 +41,8 @@ router.post("/register", async (req, res) => {
         if (existingUser) {
             return res.status(409).json({
                 success: false,
-                message: existingUser.username === username 
-                    ? "Username already exists" 
+                message: existingUser.username === username
+                    ? "Username already exists"
                     : "Email already exists"
             });
         }
@@ -51,12 +51,13 @@ router.post("/register", async (req, res) => {
         const newUser = new User({
             username,
             email,
+            helpText,
             password: cryptoJs.AES.encrypt(password, process.env.PASS_SEC).toString(),
             isAdmin: req.body.isAdmin || false
         });
 
         const savedUser = await newUser.save();
-        
+
         // Remove password from response
         const { password: userPassword, ...userWithoutPassword } = savedUser.toObject();
 
@@ -81,7 +82,7 @@ router.post("/login", async (req, res) => {
     try {
         // Validate required fields
         const { username, password } = req.body;
-        
+
         if (!username || !password) {
             return res.status(400).json({
                 success: false,
@@ -101,7 +102,7 @@ router.post("/login", async (req, res) => {
         // Verify password
         const hashedPassword = cryptoJs.AES.decrypt(user.password, process.env.PASS_SEC);
         const originalPassword = hashedPassword.toString(cryptoJs.enc.Utf8);
-        
+
         if (originalPassword !== password) {
             return res.status(401).json({
                 success: false,
@@ -136,5 +137,41 @@ router.post("/login", async (req, res) => {
         });
     }
 });
+
+// Forgot Password
+router.put("/forgot", async (req, res) => {
+    try {
+        const { username, helpText, password } = req.body;
+        const getUser = await User.findOne({ username });
+        if (!getUser) {
+            return res.status(203).json({
+                success: false,
+                message: "user not found"
+            })
+        }
+        if (getUser.helpText !== helpText) {
+            return res.status(401).json({
+                message: "Help text does not match"
+            })
+        }
+        const updatePassword = await User.findByIdAndUpdate(getUser._id, { password: cryptoJs.AES.encrypt(password, process.env.PASS_SEC).toString() })
+        if (!updatePassword) {
+            return res.status(404).json({
+                success: false,
+                message: "Failed to update password"
+            })
+        }
+        res.status(200).json({
+            success: true,
+            message: "Password updated successfully"
+        })
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Internal server error during login",
+            error: error.message
+        });
+    }
+})
 
 module.exports = router;
